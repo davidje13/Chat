@@ -1,11 +1,12 @@
-import ChamberManager from './ChamberManager';
+import RemoteChamber from './chamber/RemoteChamber';
+import make from './make';
 import './style.css';
 
 const baseURL = process.env.ECHO_HOST; // Set by webpack at build time
-const cm = new ChamberManager();
+const chamber = new RemoteChamber();
 
 function buildMessage(sender, message) {
-	const o = document.createElement('div');
+	const o = make('div');
 	if (sender === null) {
 		o.className = 'message me';
 	} else if (sender === 'err') {
@@ -14,31 +15,10 @@ function buildMessage(sender, message) {
 		o.className = 'message info';
 	} else {
 		o.className = 'message them';
-		const lbl = document.createElement('div');
-		lbl.className = 'from';
-		lbl.appendChild(document.createTextNode(sender));
-		o.appendChild(lbl);
+		o.appendChild(make('div', { 'class': 'from' }, [sender]));
 	}
-	const msg = document.createElement('div');
-	msg.className = 'content';
-	msg.innerText = message;
 
-	o.appendChild(msg);
-	return o;
-}
-
-function make(type, attrs = {}, children = []) {
-	const o = document.createElement(type);
-	Object.keys(attrs).forEach((key) => {
-		o.setAttribute(key, attrs[key]);
-	});
-	children.forEach((c) => {
-		if (typeof c === 'string') {
-			o.appendChild(document.createTextNode(c));
-		} else {
-			o.appendChild(c);
-		}
-	});
+	o.appendChild(make('div', { 'class': 'content' }, [message]));
 	return o;
 }
 
@@ -64,19 +44,19 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
-	cm.setMessageCallback(showMessage);
+	chamber.addEventListener('open', () => showMessage('info', 'Connected'));
+	chamber.addEventListener('close', () => showMessage('info', 'Closed'));
+	chamber.addEventListener('previousMessageTruncated', () => showMessage('info', '[clipped]'));
+	chamber.addEventListener('error', ({detail}) => showMessage('err', 'ERROR ' + JSON.stringify(detail)));
+	chamber.addEventListener('message', ({detail}) => showMessage(detail.senderID, detail.data));
 
-	cm.setParticipantCallback((myID, ps) => {
+	chamber.addEventListener('participantsChanged', ({detail}) => {
 		participants.innerText = '';
-		if (myID !== null) {
-			const o = document.createElement('div');
-			o.appendChild(document.createTextNode(myID + ' [Me]'));
-			participants.appendChild(o);
+		if (detail.myID !== null) {
+			participants.appendChild(make('div', {}, [detail.myID + ' [Me]']));
 		}
-		for (const p of ps) {
-			const o = document.createElement('div');
-			o.appendChild(document.createTextNode(p));
-			participants.appendChild(o);
+		for (const p of detail.participants) {
+			participants.appendChild(make('div', {}, [p]));
 		}
 	});
 
@@ -93,13 +73,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	});
 
 	function switchChamber() {
-		cm.setUrl(baseURL + '/' + fChamberName.value);
+		chamber.setUrl(baseURL + '/' + fChamberName.value);
 	}
 
 	function sendMessage() {
-		const headers = []; // TODO: UI for specifying this
 		const msg = fMessage.value;
-		if (cm.send(headers.join(':') + '\n' + msg)) {
+		if (chamber.send(msg)) {
 			fMessage.value = '';
 			showMessage(null, msg);
 		}
