@@ -72,7 +72,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	chamber.addEventListener('open', () => showMessage('info', 'Connected'));
 	chamber.addEventListener('close', () => showMessage('info', 'Closed'));
 	chamber.addEventListener('previousMessageTruncated', () => showMessage('info', '[clipped]'));
-	chamber.addEventListener('error', ({detail}) => showMessage('err', 'ERROR ' + JSON.stringify(detail)));
+	chamber.addEventListener('error', (e) => showMessage('err', 'ERROR ' + JSON.stringify(e)));
 	chamber.addEventListener('message', ({detail: {senderID, data}}) => showMessage(senderID, data));
 
 	chamber.addEventListener('open', showParticipants);

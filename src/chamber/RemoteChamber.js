@@ -122,7 +122,6 @@ export default class RemoteChamber extends EventTarget {
 		if (data.length >= p + 1 || info.unknownHeaders.length > 0) {
 			this.dispatchEvent(new CustomEvent('message', { detail: {
 				senderID: info.sender,
-				myID: this._myID,
 				data: data.subarray(p + 1),
 				unknownHeaders: info.unknownHeaders,
 			} }));
@@ -132,12 +131,12 @@ export default class RemoteChamber extends EventTarget {
 	_close(e) {
 		this._myID = null;
 		this._participants.clear();
-		this.dispatchEvent(new CustomEvent('close', { detail: e }));
+		this.dispatchEvent(new CloseEvent('close', e));
 	}
 
 	_error(e) {
 		this._myID = null;
-		this.dispatchEvent(new CustomEvent('error', { detail: e }));
+		this.dispatchEvent(new Event('error', e));
 	}
 
 	get participants() {

@@ -9,8 +9,8 @@ export default class EventSet extends EventTarget {
 		return this._set.size;
 	}
 
-	has(item) {
-		return this._set.has(item);
+	has(value) {
+		return this._set.has(value);
 	}
 
 	forEach(fn) {
@@ -21,22 +21,22 @@ export default class EventSet extends EventTarget {
 		return this._set[Symbol.iterator]();
 	}
 
-	add(item) {
-		if (!this._set.has(item)) {
-			this._set.add(item);
-			this.dispatchEvent(new CustomEvent('add', { detail: item }));
+	add(value) {
+		if (!this._set.has(value)) {
+			this._set.add(value);
+			this.dispatchEvent(new CustomEvent('add', { detail: { value } }));
 			this.dispatchEvent(new CustomEvent('change'));
 		}
 		return this;
 	}
 
-	addAll(items) {
+	addAll(values) {
 		let changed = false;
-		for (const item of items) {
-			if (!this._set.has(item)) {
+		for (const value of values) {
+			if (!this._set.has(value)) {
 				changed = true;
-				this._set.add(item);
-				this.dispatchEvent(new CustomEvent('add', { detail: item }));
+				this._set.add(value);
+				this.dispatchEvent(new CustomEvent('add', { detail: { value } }));
 			}
 		}
 		if (changed) {
@@ -45,21 +45,21 @@ export default class EventSet extends EventTarget {
 		return changed;
 	}
 
-	delete(item) {
-		if (!this._set.delete(item)) {
+	delete(value) {
+		if (!this._set.delete(value)) {
 			return false;
 		}
-		this.dispatchEvent(new CustomEvent('delete', { detail: item }));
+		this.dispatchEvent(new CustomEvent('delete', { detail: { value } }));
 		this.dispatchEvent(new CustomEvent('change'));
 		return true;
 	}
 
-	deleteAll(items) {
+	deleteAll(values) {
 		let changed = false;
-		for (const item of items) {
-			if (this._set.delete(item)) {
+		for (const value of values) {
+			if (this._set.delete(value)) {
 				changed = true;
-				this.dispatchEvent(new CustomEvent('delete', { detail: item }));
+				this.dispatchEvent(new CustomEvent('delete', { detail: { value } }));
 			}
 		}
 		if (changed) {
