@@ -93,17 +93,11 @@ export default class RemoteChamber extends EventTarget {
 		this._currentUrl = '';
 		this._ws = null;
 		this._myID = null;
-		this._ready = false;
 		this._participants = new EventSet();
 
-		this._open = this._open.bind(this);
 		this._message = this._message.bind(this);
 		this._close = this._close.bind(this);
 		this._error = this._error.bind(this);
-	}
-
-	_open() {
-		this._ready = true;
 	}
 
 	_message(e) {
@@ -136,14 +130,13 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	_close(e) {
-		this._ready = false;
 		this._myID = null;
 		this._participants.clear();
 		this.dispatchEvent(new CustomEvent('close', { detail: e }));
 	}
 
 	_error(e) {
-		this._ready = false;
+		this._myID = null;
 		this.dispatchEvent(new CustomEvent('error', { detail: e }));
 	}
 
@@ -160,7 +153,7 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	send(msg, recipients) {
-		if (!this._ready) {
+		if (!this._myID) {
 			return false;
 		}
 		const headers = makeHeaders(this._myID, recipients);
@@ -170,19 +163,17 @@ export default class RemoteChamber extends EventTarget {
 
 	reconnect() {
 		if (this._ws !== null) {
-			this._ws.removeEventListener('open', this._open);
 			this._ws.removeEventListener('message', this._message);
 			this._ws.removeEventListener('close', this._close);
 			this._ws.removeEventListener('error', this._error);
 			this._ws.close();
 			this._close();
 		}
-		this._ready = false;
+		this._myID = null;
 
 		try {
 			this._ws = new WebSocket(this._currentUrl, ['echo']);
 			this._ws.binaryType = 'arraybuffer';
-			this._ws.addEventListener('open', this._open);
 			this._ws.addEventListener('message', this._message);
 			this._ws.addEventListener('close', this._close);
 			this._ws.addEventListener('error', this._error);
@@ -192,10 +183,9 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	setUrl(url) {
-		if (this._currentUrl === url && this._ready) {
-			return;
+		if (this._currentUrl !== url || !this._myID) {
+			this._currentUrl = url;
+			this.reconnect();
 		}
-		this._currentUrl = url;
-		this.reconnect();
 	}
 }
