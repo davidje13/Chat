@@ -1,6 +1,12 @@
 # Chat
 
-A very insecure chat client.
+An end-to-end encrypted chat client.
+
+This demonstrates a Diffie-Hellman key exchange which is used to share a
+common secret for the chat room. Authentication is done using a password
+as part of a challenge + response protocol. The clients will automatically
+check passwords for anybody joining with no rate-limit protection, so this
+is not a fully secure client (no key rotation is performed either).
 
 Uses [EchoChamber](https://github.com/davidje13/EchoChamber) for server-side
 relaying.

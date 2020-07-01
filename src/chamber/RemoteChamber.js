@@ -1,5 +1,5 @@
 import EventSet from '../util/EventSet';
-import { join, encodeUTF8, readString } from '../util/buffer';
+import { join, encodeUTF8, decodeUTF8 } from '../util/buffer';
 
 const NEWLINE = '\n'.charCodeAt(0);
 const NEWLINE_BUF = Uint8Array.of(NEWLINE);
@@ -15,6 +15,10 @@ function asUint8Array(v) {
 		return encodeUTF8(v);
 	}
 	return new Uint8Array(v);
+}
+
+function readString(data, from, to) {
+	return decodeUTF8(data.subarray(from, to));
 }
 
 function makeHeaders(myID, {
@@ -156,7 +160,7 @@ export default class RemoteChamber extends EventTarget {
 			return false;
 		}
 		const headers = makeHeaders(this._myID, recipients);
-		this._ws.send(join(headers, NEWLINE_BUF, msg));
+		this._ws.send(join(headers, NEWLINE_BUF, msg).buffer);
 		return true;
 	}
 

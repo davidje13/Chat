@@ -1,29 +1,29 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
 
-export function join(...buffers) {
-	const totalBytes = buffers.reduce((t, b) => (t + b.byteLength), 0);
+export function join(...parts) {
+	const totalBytes = parts.reduce((t, b) => (t + b.byteLength), 0);
 	const combined = new Uint8Array(totalBytes);
 	let pos = 0;
-	for (const buffer of buffers) {
-		let array = buffer;
-		if (buffer instanceof ArrayBuffer) {
-			array = new Uint8Array(buffer);
+	for (const part of parts) {
+		let array;
+		if (part instanceof Uint8Array) {
+			array = part;
+		} else if (part instanceof ArrayBuffer) {
+			array = new Uint8Array(part);
+		} else {
+			array = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
 		}
 		combined.set(array, pos);
-		pos += array.length;
+		pos += array.byteLength;
 	}
-	return combined.buffer;
+	return combined;
 }
 
 export function encodeUTF8(str) {
 	return encoder.encode(str);
 }
 
-export function decodeUTF8(str) {
-	return decoder.decode(str);
-}
-
-export function readString(data, from, to) {
-	return decodeUTF8(data.subarray(from, to));
+export function decodeUTF8(data) {
+	return decoder.decode(data);
 }

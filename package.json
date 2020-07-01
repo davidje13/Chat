@@ -4,7 +4,8 @@
 	"private": true,
 	"scripts": {
 		"start": "node bin/server.js",
-		"build": "webpack --mode production"
+		"build": "webpack --mode production",
+		"test": "node test/runner.js"
 	},
 	"devDependencies": {
 		"clean-webpack-plugin": "3.x",

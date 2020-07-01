@@ -15,6 +15,9 @@ body {
 	height: 30px;
 	background: #DDDDDD;
 }
+#chamberPassLabel {
+	margin-left: 16px;
+}
 #chamber {
 	font: 0.9em monospace;
 	border: 1px solid #AAAAAA;
