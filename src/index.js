@@ -1,9 +1,12 @@
 import RemoteChamber from './chamber/RemoteChamber';
+import StringChamber from './chamber/StringChamber';
 import make from './make';
 import './style.css';
 
 const baseURL = process.env.ECHO_HOST; // Set by webpack at build time
-const chamber = new RemoteChamber();
+
+const remoteChamber = new RemoteChamber();
+const chamber = new StringChamber(remoteChamber);
 
 function buildMessage(sender, message) {
 	const o = make('div');
@@ -36,6 +39,20 @@ window.addEventListener('DOMContentLoaded', () => {
 	document.body.appendChild(participants);
 	document.body.appendChild(entry);
 
+	function switchChamber() {
+		remoteChamber.setUrl(baseURL + '/' + fChamberName.value);
+	}
+
+	function showParticipants() {
+		participants.innerText = '';
+		if (chamber.myID !== null) {
+			participants.appendChild(make('div', {}, [chamber.myID + ' [Me]']));
+		}
+		for (const p of chamber.participants) {
+			participants.appendChild(make('div', {}, [p]));
+		}
+	}
+
 	function showMessage(sender, message) {
 		const atBottom = (messages.scrollTop >= messages.scrollHeight - messages.clientHeight);
 		messages.appendChild(buildMessage(sender, message));
@@ -44,21 +61,22 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
+	function sendMessage() {
+		const msg = fMessage.value;
+		if (chamber.send(msg)) {
+			fMessage.value = '';
+			showMessage(null, msg);
+		}
+	}
+
 	chamber.addEventListener('open', () => showMessage('info', 'Connected'));
 	chamber.addEventListener('close', () => showMessage('info', 'Closed'));
 	chamber.addEventListener('previousMessageTruncated', () => showMessage('info', '[clipped]'));
 	chamber.addEventListener('error', ({detail}) => showMessage('err', 'ERROR ' + JSON.stringify(detail)));
-	chamber.addEventListener('message', ({detail}) => showMessage(detail.senderID, detail.data));
+	chamber.addEventListener('message', ({detail: {senderID, data}}) => showMessage(senderID, data));
 
-	chamber.addEventListener('participantsChanged', ({detail}) => {
-		participants.innerText = '';
-		if (detail.myID !== null) {
-			participants.appendChild(make('div', {}, [detail.myID + ' [Me]']));
-		}
-		for (const p of detail.participants) {
-			participants.appendChild(make('div', {}, [p]));
-		}
-	});
+	chamber.addEventListener('open', showParticipants);
+	chamber.participants.addEventListener('change', showParticipants);
 
 	fChamberName.addEventListener('keyup', (e) => {
 		if (e.keyCode === 13) {
@@ -71,16 +89,4 @@ window.addEventListener('DOMContentLoaded', () => {
 			sendMessage();
 		}
 	});
-
-	function switchChamber() {
-		chamber.setUrl(baseURL + '/' + fChamberName.value);
-	}
-
-	function sendMessage() {
-		const msg = fMessage.value;
-		if (chamber.send(msg)) {
-			fMessage.value = '';
-			showMessage(null, msg);
-		}
-	}
 });

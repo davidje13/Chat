@@ -1,12 +1,100 @@
+import EventSet from '../util/EventSet';
+import { join, encodeUTF8, readString } from '../util/buffer';
+
+const NEWLINE = '\n'.charCodeAt(0);
+const NEWLINE_BUF = Uint8Array.of(NEWLINE);
+const COLON = ':'.charCodeAt(0);
+const HEADMARK_ID = 'I'.charCodeAt(0);
+const HEADMARK_HI = 'H'.charCodeAt(0);
+const HEADMARK_BYE = 'B'.charCodeAt(0);
+const HEADMARK_FROM = 'F'.charCodeAt(0);
+const HEADMARK_TRUNCATED = 'X'.charCodeAt(0);
+
+function asUint8Array(v) {
+	if (typeof v === 'string') {
+		return encodeUTF8(v);
+	}
+	return new Uint8Array(v);
+}
+
+function makeHeaders(myID, {
+	recipients = [],
+	one = false,
+	andSelf = false,
+} = {}) {
+	const headers = [];
+	if (recipients.length > 0) {
+		headers.push(...recipients.map((r) => `T${r}`));
+		if (one) {
+			throw new Error('invalid recipient list');
+		}
+		if (andSelf && myID) {
+			headers.push(`T${myID}`);
+		}
+	} else if (one) {
+		headers.push('T*');
+		if (andSelf && myID) {
+			headers.push(`T${myID}`);
+		}
+	} else if (andSelf) {
+		headers.push('T**');
+	}
+	return encodeUTF8(headers.join(':'));
+}
+
+function parseHeaders(data) {
+	let offset = 0;
+	let sender = null;
+	let myID = null;
+	let wasTruncated = false;
+	const hi = new Set();
+	const bye = new Set();
+	const unknownHeaders = [];
+	while (offset < data.length) {
+		let q = data.indexOf(COLON, offset);
+		if (q === -1) {
+			q = data.length;
+		}
+		switch (data[offset]) {
+			case HEADMARK_ID:
+				myID = readString(data, offset + 1, q);
+				break;
+			case HEADMARK_HI: {
+				const name = readString(data, offset + 1, q);
+				hi.add(name);
+				bye.delete(name);
+				break;
+			}
+			case HEADMARK_BYE: {
+				const name = readString(data, offset + 1, q);
+				bye.add(name);
+				hi.delete(name);
+				break;
+			}
+			case HEADMARK_FROM:
+				sender = readString(data, offset + 1, q);
+				break;
+			case HEADMARK_TRUNCATED:
+				wasTruncated = true;
+				break;
+			default:
+				unknownHeaders.push(readString(data, offset, q));
+		}
+		offset = q + 1;
+	}
+
+	return { wasTruncated, hi, bye, myID, sender, unknownHeaders };
+}
+
 export default class RemoteChamber extends EventTarget {
 	constructor() {
 		super();
 
-		this.currentUrl = '';
-		this.ws = null;
-		this.myID = null;
-		this.ready = false;
-		this.knownParticipants = new Set();
+		this._currentUrl = '';
+		this._ws = null;
+		this._myID = null;
+		this._ready = false;
+		this._participants = new EventSet();
 
 		this._open = this._open.bind(this);
 		this._message = this._message.bind(this);
@@ -15,168 +103,99 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	_open() {
-		this.ready = true;
-		this.dispatchEvent(new CustomEvent('connectionOpen'));
+		this._ready = true;
 	}
 
-	_participantsChanged() {
-		this.dispatchEvent(new CustomEvent('participantsChanged', { detail: {
-			participants: this.knownParticipants,
-			myID: this.myID,
-		} }));
-	}
-
-	_id(id) {
-		this.myID = id;
-		this.dispatchEvent(new CustomEvent('open', { detail: {
-			id,
-			participants: this.knownParticipants,
-		} }));
-		this._participantsChanged();
-	}
-
-	_hi(id) {
-		this.knownParticipants.add(id);
-		if (this.myID) {
-			this.dispatchEvent(new CustomEvent('hi', { detail: {
-				id,
-				participants: this.knownParticipants,
-				myID: this.myID,
-			} }));
-			this._participantsChanged();
-		}
-	}
-
-	_bye(id) {
-		this.knownParticipants.delete(id);
-		if (this.myID) {
-			this.dispatchEvent(new CustomEvent('bye', { detail: {
-				id,
-				participants: this.knownParticipants,
-				myID: this.myID,
-			} }));
-			this._participantsChanged();
-		}
-	}
-
-	_message({data}) {
-		let p = data.indexOf('\n');
+	_message(e) {
+		const data = asUint8Array(e.data);
+		let p = data.indexOf(NEWLINE);
 		if (p === -1) {
 			p = data.length;
 		}
-		let offset = 0;
-		let sender = null;
-		let gotId = null;
-		const unknownHeaders = [];
-		while (offset < p) {
-			let q = data.indexOf(':', offset);
-			if (q === -1) {
-				q = p;
-			}
-			const headLn = data.substr(offset, q - offset);
-			if (headLn.startsWith('I')) {
-				gotId = headLn.substr(1);
-			} else if (headLn.startsWith('H')) {
-				this._hi(headLn.substr(1));
-			} else if (headLn.startsWith('B')) {
-				this._bye(headLn.substr(1));
-			} else if (headLn.startsWith('F')) {
-				sender = headLn.substr(1);
-			} else if (headLn === 'X') {
-				this.dispatchEvent(new CustomEvent('previousMessageTruncated'));
-			} else {
-				unknownHeaders.push(headLn);
-			}
-			offset = q + 1;
+		const info = parseHeaders(data.subarray(0, p));
+		if (info.wasTruncated) {
+			this.dispatchEvent(new CustomEvent('previousMessageTruncated'));
 		}
-		if (gotId) {
-			// invoke ID callback at end so that we can distinguish
-			// people who were already in the room before we joined
-			this._id(gotId);
+		this._participants.addAll(info.hi);
+		this._participants.deleteAll(info.bye);
+		if (info.myID) {
+			this._myID = info.myID;
+			this.dispatchEvent(new CustomEvent('open', { detail: {
+				id: this._myID,
+				participants: this._participants,
+			} }));
 		}
-		if (unknownHeaders.length > 0) {
-			this.dispatchEvent(new CustomEvent('unknownHeaders', { detail: unknownHeaders }));
-		}
-		if (data.length >= p + 1) {
+		if (data.length >= p + 1 || info.unknownHeaders.length > 0) {
 			this.dispatchEvent(new CustomEvent('message', { detail: {
-				senderID: sender,
-				myID: this.myID,
-				data: data.substr(p + 1),
-				unknownHeaders,
+				senderID: info.sender,
+				myID: this._myID,
+				data: data.subarray(p + 1),
+				unknownHeaders: info.unknownHeaders,
 			} }));
 		}
 	}
 
 	_close(e) {
-		this.ready = false;
-		this.myID = null;
-		this.knownParticipants.clear();
+		this._ready = false;
+		this._myID = null;
+		this._participants.clear();
 		this.dispatchEvent(new CustomEvent('close', { detail: e }));
-		this._participantsChanged();
 	}
 
 	_error(e) {
-		this.ready = false;
+		this._ready = false;
 		this.dispatchEvent(new CustomEvent('error', { detail: e }));
 	}
 
-	_makeHeaders({ recipients = [], one = false, andSelf = false } = {}) {
-		const headers = [];
-		if (recipients.length > 0) {
-			headers.push(...recipients.map((r) => `T${r}`));
-			if (one) {
-				throw new Error('invalid recipient list');
-			}
-			if (andSelf) {
-				headers.push(`T${this.myID}`);
-			}
-		} else if (one) {
-			headers.push('T*');
-			if (andSelf) {
-				headers.push(`T${this.myID}`);
-			}
-		} else if (andSelf) {
-			headers.push('T**');
-		}
-		return headers;
+	get participants() {
+		return this._participants;
+	}
+
+	get myID() {
+		return this._myID;
+	}
+
+	get currentUrl() {
+		return this._currentUrl;
 	}
 
 	send(msg, recipients) {
-		if (!this.ready) {
+		if (!this._ready) {
 			return false;
 		}
-		const headers = this._makeHeaders(recipients);
-		this.ws.send(headers.join(':') + '\n' + msg);
+		const headers = makeHeaders(this._myID, recipients);
+		this._ws.send(join(headers, NEWLINE_BUF, msg));
 		return true;
 	}
 
 	reconnect() {
-		if (this.ws !== null) {
-			this.ws.removeEventListener('open', this._open);
-			this.ws.removeEventListener('message', this._message);
-			this.ws.removeEventListener('close', this._close);
-			this.ws.removeEventListener('error', this._error);
-			this.ws.close();
+		if (this._ws !== null) {
+			this._ws.removeEventListener('open', this._open);
+			this._ws.removeEventListener('message', this._message);
+			this._ws.removeEventListener('close', this._close);
+			this._ws.removeEventListener('error', this._error);
+			this._ws.close();
 			this._close();
 		}
-		this.ready = false;
+		this._ready = false;
 
 		try {
-			this.ws = new WebSocket(this.currentUrl, ['echo']);
-			this.ws.addEventListener('open', this._open);
-			this.ws.addEventListener('message', this._message);
-			this.ws.addEventListener('close', this._close);
-			this.ws.addEventListener('error', this._error);
+			this._ws = new WebSocket(this._currentUrl, ['echo']);
+			this._ws.binaryType = 'arraybuffer';
+			this._ws.addEventListener('open', this._open);
+			this._ws.addEventListener('message', this._message);
+			this._ws.addEventListener('close', this._close);
+			this._ws.addEventListener('error', this._error);
 		} catch (e) {
 			this._error(e);
 		}
 	}
 
 	setUrl(url) {
-		if (this.currentUrl === url && this.ready) {
+		if (this._currentUrl === url && this._ready) {
 			return;
 		}
-		this.currentUrl = url;
+		this._currentUrl = url;
 		this.reconnect();
 	}
 }
