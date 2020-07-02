@@ -3,8 +3,9 @@ import {
 	ChallengeIssuer,
 	ChallengeResponder,
 } from '../util/encryption';
-import { join, encodeUTF8, decodeUTF8 } from '../util/buffer';
+import { encodeUTF8, decodeUTF8 } from '../util/utf8';
 import { forwardEvent } from '../util/event';
+import JoinedBuffer from '../util/JoinedBuffer';
 import EventSet from '../util/EventSet';
 
 export default class EncryptedChamber extends EventTarget {
@@ -15,6 +16,7 @@ export default class EncryptedChamber extends EventTarget {
 		this._participants = new EventSet();
 		this._challengesIssued = new Map();
 		this._challengesReceived = new Map();
+		this._ready = false;
 
 		const forward = forwardEvent(this);
 
@@ -29,7 +31,7 @@ export default class EncryptedChamber extends EventTarget {
 	}
 
 	get isConnected() {
-		return this._delegate.isConnected && this._secretKeeper.canDecrypt();
+		return this._delegate.isConnected && this._ready;
 	}
 
 	get myID() {
@@ -40,13 +42,17 @@ export default class EncryptedChamber extends EventTarget {
 		return this._participants;
 	}
 
-	_sendKeyed(recipients, key, ...buffers) {
-		return this._delegate.send(join(Uint8Array.of(key), ...buffers), recipients);
+	_sendKeyed(recipients, key, ...data) {
+		return this._delegate.send(
+			new JoinedBuffer(Uint8Array.of(key), ...data),
+			recipients,
+		);
 	}
 
 	_open({detail: {participants}}) {
 		if (!participants.size) {
 			this._secretKeeper.createSecret().then(() => {
+				this._ready = true;
 				this.dispatchEvent(new CustomEvent('open', { detail: {
 					id: this._delegate.myID,
 					participants: this._participants,
@@ -115,12 +121,16 @@ export default class EncryptedChamber extends EventTarget {
 		this._challengesIssued.delete(senderID); // prevent multiple answers
 		const wrappingKey = await issuer.handleAnswer(senderID, data);
 		if (wrappingKey) {
-			const wrappedSecret = await this._secretKeeper.wrap(
-				this._delegate.myID,
-				wrappingKey
+			const wrappedSecret = await this._secretKeeper.wrap(this._delegate.myID, wrappingKey);
+			const encryptedParticipants = await this._encrypt(encodeUTF8([...this.participants].join(':')));
+			const encryptedWelcome = await this._encrypt(encodeUTF8(senderID));
+			this._sendKeyed(
+				{ recipients: [senderID] },
+				3,
+				new JoinedBuffer()
+					.addDynamic(wrappedSecret)
+					.addFixed(encryptedParticipants)
 			);
-			const encryptedWelcome = await this._secretKeeper.encrypt(this._delegate.myID, encodeUTF8(senderID));
-			this._sendKeyed({ recipients: [senderID] }, 3, wrappedSecret); // TODO: include (encrypted) list of current participants
 			this._sendKeyed({}, 4, encryptedWelcome);
 			this._participants.add(senderID);
 		} else {
@@ -140,14 +150,16 @@ export default class EncryptedChamber extends EventTarget {
 				id: senderID,
 			} }));
 		} else {
+			const [wrappedSecret, encryptedParticipants] = new JoinedBuffer(data).split(JoinedBuffer.DYNAMIC);
 			await this._secretKeeper.unwrap(
 				senderID,
-				data,
+				wrappedSecret,
 				responder.getUnwrappingKey()
 			);
 			this._challengesReceived.clear();
-			this._participants.add(senderID);
-			// TODO: load (encrypted) list of participants
+			const participants = decodeUTF8(await this._secretKeeper.decrypt(senderID, encryptedParticipants)).split(':');
+			this._participants.addAll([senderID, ...participants]);
+			this._ready = true;
 			this.dispatchEvent(new CustomEvent('open', { detail: {
 				id: this._delegate.myID,
 				participants: this._participants,
@@ -203,8 +215,11 @@ export default class EncryptedChamber extends EventTarget {
 		this._participants.clear();
 	}
 
+	_encrypt(msg) {
+		return this._secretKeeper.encrypt(this._delegate.myID, msg);
+	}
+
 	async send(msg, recipients) {
-		const encrypted = await this._secretKeeper.encrypt(this._delegate.myID, msg);
-		return this._sendKeyed(recipients, 255, encrypted);
+		return this._sendKeyed(recipients, 255, await this._encrypt(msg));
 	}
 }

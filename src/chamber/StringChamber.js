@@ -1,4 +1,4 @@
-import { encodeUTF8, decodeUTF8 } from '../util/buffer';
+import { encodeUTF8, decodeUTF8 } from '../util/utf8';
 import { forwardEvent } from '../util/event';
 
 export default class StringChamber extends EventTarget {

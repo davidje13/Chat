@@ -5,11 +5,11 @@ const webpackConfig = require('../webpack.config');
 
 new WebSocketServer()
 	.addHandler(new EchoChamberHalls('/', [], {
-		MAX_QUEUE_ITEMS: 0,
-		MAX_QUEUE_DATA: 0,
-		HEADERS_MAX_LENGTH: 16,
-		CHAMBER_MAX_CONNECTIONS: 2,
-		MAX_CHAMBERS: 512,
+		MAX_QUEUE_ITEMS: 1024,
+		MAX_QUEUE_DATA: 16 * 1024,
+		HEADERS_MAX_LENGTH: 128,
+		CHAMBER_MAX_CONNECTIONS: 32,
+		MAX_CHAMBERS: 64,
 	}))
 	.listen(8081, 'localhost');
 

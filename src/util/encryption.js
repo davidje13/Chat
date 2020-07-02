@@ -1,28 +1,11 @@
-import { encodeUTF8, join } from './buffer';
+import { encodeUTF8 } from './utf8';
+import JoinedBuffer from './JoinedBuffer';
 
 // useful resources:
 // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
 // https://github.com/diafygi/webcrypto-examples/
 
-const Crypto = window.crypto.subtle;
-
-function randomBytes(bytes) {
-	const array = new Uint8Array(bytes);
-	window.crypto.getRandomValues(array);
-	return array;
-}
-
 const IV_BYTES = 96 / 8;
-
-function aesGcmOptions(iv, senderIdentity) {
-	return {
-		name: 'AES-GCM',
-		iv,
-		additionalData: encodeUTF8(senderIdentity),
-		tagLength: 128,
-	};
-}
-
 const TOKEN_BYTES = 16;
 
 const DH_KEY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-521' };
@@ -34,15 +17,53 @@ const DH_D_KEY_USAGES = ['encrypt', 'decrypt', 'wrapKey', 'unwrapKey'];
 const SECRET_KEY_ALGORITHM = { name: 'AES-GCM', length: 256 };
 const SECRET_KEY_USAGES = ['encrypt', 'decrypt'];
 
-async function makeAnswer(sharedKey, token, id, password) {
-	const combined = join(encodeUTF8(id), token, encodeUTF8(password));
+const Crypto = window.crypto.subtle;
 
+function randomBytes(bytes) {
+	const array = new Uint8Array(bytes);
+	window.crypto.getRandomValues(array);
+	return array;
+}
+
+function aesGcmOptions(iv, senderIdentity) {
+	return {
+		name: 'AES-GCM',
+		iv,
+		additionalData: encodeUTF8(senderIdentity || ''),
+		tagLength: 128,
+	};
+}
+
+async function encrypt(key, data, senderIdentity = null) {
+	const iv = randomBytes(IV_BYTES);
+	const encrypted = await Crypto.encrypt(aesGcmOptions(iv, senderIdentity), key, data);
+	return new JoinedBuffer(iv, encrypted);
+}
+
+async function decrypt(key, data, senderIdentity = null) {
+	const [iv, encrypted] = new JoinedBuffer(data).split(IV_BYTES);
+	return new Uint8Array(await Crypto.decrypt(aesGcmOptions(iv, senderIdentity), key, encrypted));
+}
+
+function bytesEqual(a, b) {
+	if (a.length !== b.length) {
+		return false;
+	}
+	for (let i = 0; i < a.length; ++ i) {
+		if (a[i] !== b[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+async function makeAnswer(sharedKey, token, id, password) {
 	// encrypt before hashing to ensure a MITM can't simply decrypt a
 	// legitimate answer and re-encrypt with a different key
 	const combinedCrypt = await Crypto.encrypt(
 		aesGcmOptions(token.subarray(0, IV_BYTES)),
 		sharedKey,
-		combined,
+		new JoinedBuffer(id, token, password).toBytes(),
 	);
 
 	// stretching with fixed iteration count
@@ -69,7 +90,7 @@ export class SecretKeeper {
 
 	async wrap(senderIdentity, wrappingKey) {
 		const iv = randomBytes(IV_BYTES);
-		return join(iv, await Crypto.wrapKey(
+		return new JoinedBuffer(iv, await Crypto.wrapKey(
 			'raw',
 			this.secretKey,
 			wrappingKey,
@@ -78,10 +99,10 @@ export class SecretKeeper {
 	}
 
 	async unwrap(senderIdentity, data, unwrappingKey) {
-		const iv = data.subarray(0, IV_BYTES);
+		const [iv, wrapped] = new JoinedBuffer(data).split(IV_BYTES);
 		this.secretKey = await Crypto.unwrapKey(
 			'raw',
-			data.subarray(IV_BYTES),
+			wrapped,
 			unwrappingKey,
 			aesGcmOptions(iv, senderIdentity),
 			SECRET_KEY_ALGORITHM,
@@ -94,28 +115,18 @@ export class SecretKeeper {
 		return Boolean(this.secretKey);
 	}
 
-	async encrypt(senderIdentity, data) {
+	encrypt(senderIdentity, data) {
 		if (!this.secretKey) {
 			throw new Error('not connected');
 		}
-		const iv = randomBytes(IV_BYTES);
-		return join(iv, await Crypto.encrypt(
-			aesGcmOptions(iv, senderIdentity),
-			this.secretKey,
-			data,
-		));
+		return encrypt(this.secretKey, data, senderIdentity);
 	}
 
-	async decrypt(senderIdentity, data) {
+	decrypt(senderIdentity, data) {
 		if (!this.secretKey) {
 			throw new Error('not connected');
 		}
-		const iv = data.subarray(0, IV_BYTES);
-		return new Uint8Array(await Crypto.decrypt(
-			aesGcmOptions(iv, senderIdentity),
-			this.secretKey,
-			data.subarray(IV_BYTES),
-		));
+		return decrypt(this.secretKey, data, senderIdentity);
 	}
 }
 
@@ -131,10 +142,10 @@ export class ChallengeIssuer {
 		}
 		++ this.stage;
 
+		this.token = randomBytes(TOKEN_BYTES);
 		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, false, DH_KEY_USAGES);
 		const publicKey = await Crypto.exportKey('raw', this.ecKey.publicKey);
-		this.token = randomBytes(TOKEN_BYTES);
-		return join(this.token, publicKey);
+		return new JoinedBuffer(this.token, publicKey);
 	}
 
 	async handleAnswer(id, data) {
@@ -143,46 +154,27 @@ export class ChallengeIssuer {
 		}
 		++ this.stage;
 
-		const header = new Uint32Array(data.buffer, data.byteOffset, 1);
-		const publicKeyLen = header[0];
-		const encryptedAnswer = data.subarray(publicKeyLen + 4);
+		const [publicKey, encryptedAnswer] = new JoinedBuffer(data).split(JoinedBuffer.DYNAMIC);
 
 		const senderPublicEcKey = await Crypto.importKey(
 			'raw',
-			data.subarray(4, publicKeyLen + 4),
+			publicKey,
 			DH_KEY_ALGORITHM,
 			false,
 			[],
 		);
 
 		const sharedKey = await Crypto.deriveKey(
-			{
-				name: 'ECDH',
-				namedCurve: 'P-521',
-				public: senderPublicEcKey,
-			},
+			{ name: 'ECDH', namedCurve: 'P-521', public: senderPublicEcKey },
 			this.ecKey.privateKey,
 			DH_D_KEY_ALGORITHM,
 			false,
 			DH_D_KEY_USAGES,
 		);
 		const expectedAnswer = await makeAnswer(sharedKey, this.token, id, this.password);
-		const iv = encryptedAnswer.subarray(0, IV_BYTES);
-		const answer = new Uint8Array(await Crypto.decrypt(
-			aesGcmOptions(iv),
-			sharedKey,
-			encryptedAnswer.subarray(IV_BYTES),
-		));
-		if (answer.length !== expectedAnswer.length) {
-			return null;
-		}
-		for (let i = 0; i < expectedAnswer.length; ++ i) {
-			if (answer[i] !== expectedAnswer[i]) {
-				return null;
-			}
-		}
+		const answer = await decrypt(sharedKey, encryptedAnswer);
 
-		return sharedKey;
+		return bytesEqual(answer, expectedAnswer) ? sharedKey : null;
 	}
 }
 
@@ -197,10 +189,11 @@ export class ChallengeResponder {
 		}
 		++ this.stage;
 
-		this.token = data.subarray(0, TOKEN_BYTES);
-		this.senderPublicEcKey = await Crypto.importKey(
+		const [token, publicKey] = new JoinedBuffer(data).split(TOKEN_BYTES);
+		this.token = token;
+		const senderPublicEcKey = await Crypto.importKey(
 			'raw',
-			data.subarray(TOKEN_BYTES),
+			publicKey,
 			DH_KEY_ALGORITHM,
 			false,
 			[],
@@ -208,11 +201,7 @@ export class ChallengeResponder {
 		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, false, DH_KEY_USAGES);
 
 		this.sharedKey = await Crypto.deriveKey(
-			{
-				name: 'ECDH',
-				namedCurve: 'P-521',
-				public: this.senderPublicEcKey,
-			},
+			{ name: 'ECDH', namedCurve: 'P-521', public: senderPublicEcKey },
 			this.ecKey.privateKey,
 			DH_D_KEY_ALGORITHM,
 			false,
@@ -227,15 +216,9 @@ export class ChallengeResponder {
 		++ this.stage;
 
 		const answer = await makeAnswer(this.sharedKey, this.token, id, password);
-		const iv = randomBytes(IV_BYTES);
-		const encrypted = await Crypto.encrypt(aesGcmOptions(iv), this.sharedKey, answer);
-		const publicKey = await Crypto.exportKey('raw', this.ecKey.publicKey);
-		return join(
-			Uint32Array.of(publicKey.byteLength),
-			publicKey,
-			iv,
-			encrypted,
-		);
+		return new JoinedBuffer()
+			.addDynamic(await Crypto.exportKey('raw', this.ecKey.publicKey))
+			.addFixed(await encrypt(this.sharedKey, answer));
 	}
 
 	getUnwrappingKey() {

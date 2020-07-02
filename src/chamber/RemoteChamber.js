@@ -1,5 +1,6 @@
 import EventSet from '../util/EventSet';
-import { join, encodeUTF8, decodeUTF8 } from '../util/buffer';
+import { encodeUTF8, decodeUTF8 } from '../util/utf8';
+import JoinedBuffer from '../util/JoinedBuffer';
 
 const NEWLINE = '\n'.charCodeAt(0);
 const NEWLINE_BUF = Uint8Array.of(NEWLINE);
@@ -164,7 +165,7 @@ export default class RemoteChamber extends EventTarget {
 			return false;
 		}
 		const headers = makeHeaders(this._myID, recipients);
-		this._ws.send(join(headers, NEWLINE_BUF, msg).buffer);
+		this._ws.send(new JoinedBuffer(headers, NEWLINE_BUF, msg).toBytes());
 		return true;
 	}
 

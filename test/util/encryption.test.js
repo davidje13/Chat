@@ -4,7 +4,7 @@ import {
 	ChallengeIssuer,
 	ChallengeResponder,
 } from '../../src/util/encryption';
-import { encodeUTF8 } from '../../src/util/buffer';
+import { encodeUTF8 } from '../../src/util/utf8';
 
 describe('SecretKeeper', () => {
 	it('encrypts and decrypts data', async () => {
@@ -12,7 +12,7 @@ describe('SecretKeeper', () => {
 		await secretKeeper.createSecret();
 
 		const data = encodeUTF8('test');
-		const encrypted = await secretKeeper.encrypt('foo', data);
+		const encrypted = (await secretKeeper.encrypt('foo', data)).toBytes();
 		const decrypted = await secretKeeper.decrypt('foo', encrypted);
 		expect(decrypted).toEqual(data);
 	});
@@ -22,7 +22,7 @@ describe('SecretKeeper', () => {
 		await secretKeeper.createSecret();
 
 		const data = encodeUTF8('test');
-		const encrypted = await secretKeeper.encrypt('foo', data);
+		const encrypted = (await secretKeeper.encrypt('foo', data)).toBytes();
 		await expect(secretKeeper.decrypt('nope', encrypted)).toReject();
 	});
 
@@ -33,7 +33,7 @@ describe('SecretKeeper', () => {
 		await secretKeeper2.createSecret();
 
 		const data = encodeUTF8('test');
-		const encrypted = await secretKeeper.encrypt('foo', data);
+		const encrypted = (await secretKeeper.encrypt('foo', data)).toBytes();
 		await expect(secretKeeper2.decrypt('foo', encrypted)).toReject();
 	});
 });
@@ -47,23 +47,23 @@ describe('challenge flow', () => {
 		const issuer = new ChallengeIssuer(password);
 		await issuerSecret.createSecret();
 
-		const wire1 = await issuer.issue();
+		const wire1 = (await issuer.issue()).toBytes();
 
 		const responderSecret = new SecretKeeper();
 		const responder = new ChallengeResponder();
 		await responder.handleIssue(wire1);
-		const wire2 = await responder.answer(id, password);
+		const wire2 = (await responder.answer(id, password)).toBytes();
 
 		const wrappingKey = await issuer.handleAnswer(id, wire2);
 		expect(wrappingKey).toBeTruthy();
-		const wire3 = await issuerSecret.wrap('abc', wrappingKey);
+		const wire3 = (await issuerSecret.wrap('abc', wrappingKey)).toBytes();
 
 		const unwrappingKey = responder.getUnwrappingKey();
 		expect(unwrappingKey).toBeTruthy();
 		await responderSecret.unwrap('abc', wire3, unwrappingKey);
 
 		const data = encodeUTF8('test');
-		const encrypted = await issuerSecret.encrypt('foo', data);
+		const encrypted = (await issuerSecret.encrypt('foo', data)).toBytes();
 		const decrypted = await responderSecret.decrypt('foo', encrypted);
 		expect(decrypted).toEqual(data);
 	});
@@ -74,10 +74,10 @@ describe('challenge flow', () => {
 		const issuer = new ChallengeIssuer(password);
 		const responder = new ChallengeResponder();
 
-		const d1 = await issuer.issue();
-		await responder.handleIssue(d1);
-		const d2 = await responder.answer(id, 'wrong-password');
-		const wrappingKey = await issuer.handleAnswer(id, d2);
+		const wire1 = (await issuer.issue()).toBytes();
+		await responder.handleIssue(wire1);
+		const wire2 = (await responder.answer(id, 'wrong-password')).toBytes();
+		const wrappingKey = await issuer.handleAnswer(id, wire2);
 		expect(wrappingKey).toEqual(null);
 	});
 
@@ -89,12 +89,12 @@ describe('challenge flow', () => {
 		password,
 	) {
 		const issuer = new ChallengeIssuer(password);
-		const wire1 = await issuer.issue();
+		const wire1 = (await issuer.issue()).toBytes();
 		const responder = new ChallengeResponder();
 		await responder.handleIssue(wire1);
-		const wire2 = await responder.answer(id2, password);
+		const wire2 = (await responder.answer(id2, password)).toBytes();
 		const wrappingKey = await issuer.handleAnswer(id2, wire2);
-		const wire3 = await secretKeeper1.wrap(id1, wrappingKey);
+		const wire3 = (await secretKeeper1.wrap(id1, wrappingKey)).toBytes();
 		const unwrappingKey = responder.getUnwrappingKey();
 		await secretKeeper2.unwrap(id1, wire3, unwrappingKey);
 	}
@@ -110,7 +110,7 @@ describe('challenge flow', () => {
 		await negotiateKeyExchange('b', secret2, 'c', secret3, 'another-password');
 
 		const data = encodeUTF8('test');
-		const encrypted = await secret1.encrypt('foo', data);
+		const encrypted = (await secret1.encrypt('foo', data)).toBytes();
 		const decrypted = await secret3.decrypt('foo', encrypted);
 		expect(decrypted).toEqual(data);
 	});
