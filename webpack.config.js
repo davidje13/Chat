@@ -28,6 +28,7 @@ module.exports = {
 		new webpack.DefinePlugin({ 'process.env.ECHO_HOST': JSON.stringify(echoChamberHost) }),
 		new HtmlWebpackPlugin({
 			title: 'Chat',
+			favicon: './src/favicon.png',
 			meta: {
 				'Content-Security-Policy': {
 					'http-equiv': 'Content-Security-Policy',

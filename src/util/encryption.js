@@ -4,6 +4,7 @@ import JoinedBuffer from './JoinedBuffer';
 // useful resources:
 // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
 // https://github.com/diafygi/webcrypto-examples/
+// https://webkit.org/blog/7790/update-on-web-cryptography/
 
 const IV_BYTES = 96 / 8;
 const TOKEN_BYTES = 16;
