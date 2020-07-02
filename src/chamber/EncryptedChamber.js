@@ -28,16 +28,16 @@ export default class EncryptedChamber extends EventTarget {
 		delegate.addEventListener('error', forward);
 	}
 
-	get participants() {
-		return this._participants;
+	get isConnected() {
+		return this._delegate.isConnected && this._secretKeeper.canDecrypt();
 	}
 
 	get myID() {
 		return this._delegate.myID;
 	}
 
-	get isConnected() {
-		return this._secretKeeper.canDecrypt();
+	get participants() {
+		return this._participants;
 	}
 
 	_sendKeyed(recipients, key, ...buffers) {

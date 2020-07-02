@@ -18,12 +18,16 @@ export default class StringChamber extends EventTarget {
 		delegate.addEventListener('error', forward);
 	}
 
-	get participants() {
-		return this._delegate.participants;
+	get isConnected() {
+		return this._delegate.isConnected;
 	}
 
 	get myID() {
 		return this._delegate.myID;
+	}
+
+	get participants() {
+		return this._delegate.participants;
 	}
 
 	send(msg, recipients) {

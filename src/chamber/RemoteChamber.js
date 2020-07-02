@@ -143,12 +143,16 @@ export default class RemoteChamber extends EventTarget {
 		this.dispatchEvent(new Event('error', e));
 	}
 
-	get participants() {
-		return this._participants;
+	get isConnected() {
+		return Boolean(this._myID);
 	}
 
 	get myID() {
 		return this._myID;
+	}
+
+	get participants() {
+		return this._participants;
 	}
 
 	get currentUrl() {

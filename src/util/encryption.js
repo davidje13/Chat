@@ -131,7 +131,7 @@ export class ChallengeIssuer {
 		}
 		++ this.stage;
 
-		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, true, DH_KEY_USAGES);
+		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, false, DH_KEY_USAGES);
 		const publicKey = await Crypto.exportKey('raw', this.ecKey.publicKey);
 		this.token = randomBytes(TOKEN_BYTES);
 		return join(this.token, publicKey);
@@ -205,7 +205,7 @@ export class ChallengeResponder {
 			false,
 			[],
 		);
-		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, true, DH_KEY_USAGES);
+		this.ecKey = await Crypto.generateKey(DH_KEY_ALGORITHM, false, DH_KEY_USAGES);
 
 		this.sharedKey = await Crypto.deriveKey(
 			{
