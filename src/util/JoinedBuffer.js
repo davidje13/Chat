@@ -143,6 +143,14 @@ export default class JoinedBuffer {
 		return allData.subarray(start, end);
 	}
 
+	readNextChunk(size) {
+		const allData = this.toBytes();
+		const start = this._readPos;
+		const end = Math.min(start + size, this._byteLength);
+		this._readPos = end;
+		return allData.subarray(start, end);
+	}
+
 	readUint8() {
 		return this.toBytes()[this._readPos ++];
 	}

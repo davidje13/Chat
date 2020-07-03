@@ -2,6 +2,10 @@ import EventSet from '../util/EventSet';
 import { encodeUTF8, decodeUTF8 } from '../util/utf8';
 import JoinedBuffer from '../util/JoinedBuffer';
 
+// 0 gives best upload speed for fragmented files,
+// but we reduce the workload a little for not much slowdown:
+const WS_BUFFER_CHECK_INTERVAL = 20;
+
 const NEWLINE = '\n'.charCodeAt(0);
 const NEWLINE_BUF = Uint8Array.of(NEWLINE);
 const COLON = ':'.charCodeAt(0);
@@ -92,10 +96,13 @@ export default class RemoteChamber extends EventTarget {
 		this._ws = null;
 		this._myID = null;
 		this._participants = new EventSet();
+		this._allSentResolvers = [];
+		this._polling = null;
 
 		this._message = this._message.bind(this);
 		this._close = this._close.bind(this);
 		this._error = this._error.bind(this);
+		this._checkSent = this._checkSent.bind(this);
 	}
 
 	_message(e) {
@@ -129,11 +136,13 @@ export default class RemoteChamber extends EventTarget {
 	_close(e) {
 		this._myID = null;
 		this._participants.clear();
+		this._resolveCurrent(false);
 		this.dispatchEvent(new CloseEvent('close', e));
 	}
 
 	_error(e) {
 		this._myID = null;
+		this._resolveCurrent(false);
 		this.dispatchEvent(new Event('error', e));
 	}
 
@@ -155,11 +164,40 @@ export default class RemoteChamber extends EventTarget {
 
 	send(msg, recipients) {
 		if (!this._myID) {
-			return false;
+			return Promise.resolve(false);
+		}
+		if (this._polling) {
+			this._checkSent();
 		}
 		const headers = makeHeaders(this._myID, recipients);
 		this._ws.send(new JoinedBuffer(headers, NEWLINE_BUF, msg).toBytes());
-		return true;
+
+		// WebSockets don't provide a native event to notify when they have been sent,
+		// so we have to poll instead:
+		const promise = new Promise((resolve) => this._allSentResolvers.push(resolve));
+		if (!this._polling) {
+			// no point checking immediately; will not have sent until at least the next MACROtask
+			this._polling = window.setTimeout(this._checkSent, 0);
+		}
+		return promise;
+	}
+
+	_checkSent() {
+		console.log('checking', this._ws.bufferedAmount);
+		if (!this._ws.bufferedAmount) {
+			this._resolveCurrent(true);
+		} else {
+			window.clearTimeout(this._polling);
+			this._polling = window.setTimeout(this._checkSent, WS_BUFFER_CHECK_INTERVAL);
+		}
+	}
+
+	_resolveCurrent(state) {
+		const resolvers = this._allSentResolvers;
+		this._allSentResolvers = [];
+		window.clearTimeout(this._polling);
+		this._polling = null;
+		resolvers.forEach((resolve) => resolve(state));
 	}
 
 	reconnect() {

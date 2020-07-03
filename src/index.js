@@ -1,6 +1,7 @@
 import RemoteChamber from './chamber/RemoteChamber';
 import EncryptedChamber from './chamber/EncryptedChamber';
 import MultiplexedChamber from './chamber/MultiplexedChamber';
+import FragmentedChamber from './chamber/FragmentedChamber';
 import StringChamber from './chamber/StringChamber';
 import make from './make';
 import './style.css';
@@ -12,8 +13,8 @@ const remoteChamber = new RemoteChamber();
 const encryptedChamber = new EncryptedChamber(remoteChamber);
 const baseChamber = encryptedChamber;
 const multiplexedChamber = new MultiplexedChamber(baseChamber);
-const chatChamber = new StringChamber(multiplexedChamber.channel(0));
-const avatarChamber = multiplexedChamber.channel(1);
+const chatChamber = new StringChamber(new FragmentedChamber(multiplexedChamber.channel(0)));
+const avatarChamber = new FragmentedChamber(multiplexedChamber.channel(1));
 
 function buildMessage(sender, message) {
 	const o = make('div');
