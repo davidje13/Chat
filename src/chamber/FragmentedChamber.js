@@ -41,6 +41,7 @@ export default class StringChamber extends EventTarget {
 
 		this._sendQueue = [];
 		this._receivers = new Map();
+		this._lastSenderID = null;
 		this._delegate = delegate;
 		this._maxChunkSize = maxChunkSize;
 		delegate.addEventListener('open', forward);
@@ -67,6 +68,7 @@ export default class StringChamber extends EventTarget {
 		const type = buffer.readUint8();
 		const data = buffer.read(JoinedBuffer.TO_END);
 
+		this._lastSenderID = detail.senderID;
 		let receiver = null;
 		if (type & START_PARTIAL) {
 			receiver = new JoinedBuffer();
@@ -88,7 +90,7 @@ export default class StringChamber extends EventTarget {
 	}
 
 	_truncated(e) {
-		if (!this._receivers.delete(detail.senderID)) {
+		if (!this._receivers.delete(this._lastSenderID)) {
 			this.dispatchEvent(copyEvent(e));
 		}
 	}
