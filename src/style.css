@@ -1,6 +1,7 @@
 html, body {
 	margin: 0;
 	padding: 0;
+	line-height: 1.2;
 }
 body {
 	font-family: monospace;
@@ -104,6 +105,10 @@ body {
 }
 #participants div {
 	margin: 10px;
+}
+#participants img {
+	height: 1.2em;
+	vertical-align: middle;
 }
 #entry {
 	position: absolute;

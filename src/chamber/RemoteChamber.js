@@ -11,13 +11,6 @@ const HEADMARK_BYE = 'B'.charCodeAt(0);
 const HEADMARK_FROM = 'F'.charCodeAt(0);
 const HEADMARK_TRUNCATED = 'X'.charCodeAt(0);
 
-function asUint8Array(v) {
-	if (typeof v === 'string') {
-		return encodeUTF8(v);
-	}
-	return new Uint8Array(v);
-}
-
 function readString(data, from, to) {
 	return decodeUTF8(data.subarray(from, to));
 }
@@ -106,7 +99,7 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	_message(e) {
-		const data = asUint8Array(e.data);
+		const data = (typeof e.data === 'string') ? encodeUTF8(e.data) : new Uint8Array(e.data);
 		let p = data.indexOf(NEWLINE);
 		if (p === -1) {
 			p = data.length;

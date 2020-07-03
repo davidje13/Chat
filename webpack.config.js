@@ -40,7 +40,7 @@ module.exports = {
 						"style-src 'self'",
 						"font-src 'self'",
 						`connect-src 'self' ${echoChamberHost}`,
-						"img-src 'self'",
+						"img-src 'self' blob:",
 						"form-action 'none'",
 					].join('; '),
 				},

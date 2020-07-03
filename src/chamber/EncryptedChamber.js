@@ -220,6 +220,7 @@ export default class EncryptedChamber extends EventTarget {
 	}
 
 	async send(msg, recipients) {
-		return this._sendKeyed(recipients, 255, await this._encrypt(msg));
+		const bytes = new JoinedBuffer(msg).toBytes();
+		return this._sendKeyed(recipients, 255, await this._encrypt(bytes));
 	}
 }

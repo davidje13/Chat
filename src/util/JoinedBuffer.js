@@ -1,6 +1,7 @@
 import { encodeUTF8, decodeUTF8 } from './utf8';
 
 const EMPTY_ARRAY = new Uint8Array(0);
+const DYNAMIC_SIZE_BYTES = 4;
 
 function bytesFrom(data) {
 	if (data instanceof Uint8Array) {
@@ -12,19 +13,47 @@ function bytesFrom(data) {
 	if (typeof data === 'string') {
 		return encodeUTF8(data);
 	}
-	return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+	throw new Error('cannot interpret array with platform-dependent byte ordering as bytes');
+}
+
+// big endian byte functions (ensure consistent ordering for network communications)
+
+export function uintToBytes(value, size) {
+	if (size === 1) {
+		return Uint8Array.of(value);
+	}
+	const result = new Uint8Array(size);
+	let v = value;
+	for (let i = size; (i --) > 0;) {
+		result[i] = v & 0xFF;
+		v >>= 8;
+	}
+	return result;
+}
+
+export function bytesToUint(bytes, pos, size) {
+	let v = 0;
+	for (let i = 0; i < size; ++ i) {
+		v = (v << 8) | bytes[pos + i];
+	}
+	return v;
+}
+
+export function countUintBytes(v) {
+	let b = 0;
+	while (v > 0) {
+		v >>= 8;
+		++ b;
+	}
+	return b;
 }
 
 function resolveSize(data, pos, length, size) {
 	if (size === DYNAMIC) {
-		const header = new Uint32Array(
-			data.buffer,
-			data.byteOffset + pos,
-			1,
-		);
+		const dynamicSize = bytesToUint(data, pos, DYNAMIC_SIZE_BYTES);
 		return {
-			start: pos + header.byteLength,
-			end: pos + header.byteLength + header[0],
+			start: pos + DYNAMIC_SIZE_BYTES,
+			end: pos + DYNAMIC_SIZE_BYTES + dynamicSize,
 		};
 	}
 	if (size === TO_END) {
@@ -90,14 +119,14 @@ export default class JoinedBuffer {
 	addDynamic(...data) {
 		data.forEach((datum) => {
 			if (datum instanceof JoinedBuffer) {
-				this._parts.push(bytesFrom(Uint32Array.of(datum._byteLength)));
+				this._parts.push(uintToBytes(datum._byteLength, DYNAMIC_SIZE_BYTES));
 				this._parts.push(...datum._parts);
-				this._byteLength += Uint32Array.BYTES_PER_ELEMENT + datum._byteLength;
+				this._byteLength += DYNAMIC_SIZE_BYTES + datum._byteLength;
 			} else {
 				const bytes = bytesFrom(datum);
-				this._parts.push(bytesFrom(Uint32Array.of(bytes.byteLength)));
+				this._parts.push(uintToBytes(bytes.byteLength, DYNAMIC_SIZE_BYTES));
 				this._parts.push(bytes);
-				this._byteLength += Uint32Array.BYTES_PER_ELEMENT + bytes.byteLength;
+				this._byteLength += DYNAMIC_SIZE_BYTES + bytes.byteLength;
 			}
 		});
 		return this;
@@ -114,8 +143,15 @@ export default class JoinedBuffer {
 		return allData.subarray(start, end);
 	}
 
-	readByte() {
+	readUint8() {
 		return this.toBytes()[this._readPos ++];
+	}
+
+	readUint(size) {
+		const allData = this.toBytes();
+		const value = bytesToUint(allData, this._readPos, size);
+		this._readPos += size;
+		return value;
 	}
 
 	skip(size) {
