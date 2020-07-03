@@ -183,7 +183,6 @@ export default class RemoteChamber extends EventTarget {
 	}
 
 	_checkSent() {
-		console.log('checking', this._ws.bufferedAmount);
 		if (!this._ws.bufferedAmount) {
 			this._resolveCurrent(true);
 		} else {
