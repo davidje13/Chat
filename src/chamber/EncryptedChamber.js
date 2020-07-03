@@ -49,12 +49,12 @@ export default class EncryptedChamber extends EventTarget {
 		);
 	}
 
-	_open({detail: {participants}}) {
-		if (!participants.size) {
+	_open({detail}) {
+		if (!detail.participants.size) {
 			this._secretKeeper.createSecret().then(() => {
 				this._ready = true;
 				this.dispatchEvent(new CustomEvent('open', { detail: {
-					id: this._delegate.myID,
+					...detail,
 					participants: this._participants,
 				} }));
 			});
@@ -71,7 +71,7 @@ export default class EncryptedChamber extends EventTarget {
 	}
 
 	_handleKnock(data, {senderID}) {
-		if (!this._secretKeeper.canDecrypt()) {
+		if (!this._secretKeeper.canDecrypt() || this._delegate.myID === senderID) {
 			return;
 		}
 		this.dispatchEvent(new CustomEvent('knock', { detail: { id: senderID } }));
@@ -92,7 +92,7 @@ export default class EncryptedChamber extends EventTarget {
 	}
 
 	async _handleChallengeIssue(data, {senderID}) {
-		if (this._secretKeeper.canDecrypt()) {
+		if (this._secretKeeper.canDecrypt() || this._delegate.myID === senderID) {
 			return; // already have access - ignore challenge
 		}
 		const responder = new ChallengeResponder();
@@ -158,7 +158,9 @@ export default class EncryptedChamber extends EventTarget {
 			);
 			this._challengesReceived.clear();
 			const participants = decodeUTF8(await this._secretKeeper.decrypt(senderID, encryptedParticipants)).split(':');
-			this._participants.addAll([senderID, ...participants]);
+			const toAdd = new Set([senderID, ...participants]);
+			toAdd.delete(this._delegate.myID);
+			this._participants.addAll(toAdd);
 			this._ready = true;
 			this.dispatchEvent(new CustomEvent('open', { detail: {
 				id: this._delegate.myID,

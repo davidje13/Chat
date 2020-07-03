@@ -4,7 +4,7 @@ import JoinedBuffer from '../util/JoinedBuffer';
 const START_PARTIAL = 1;
 const END_PARTIAL = 2;
 
-function resolveRecipients(participants, myID, {
+function resolveRecipients(participants, {
 	recipients = [],
 	one = false,
 	andSelf = false,
@@ -16,7 +16,6 @@ function resolveRecipients(participants, myID, {
 		for (const r of recipients) {
 			choices.delete(r);
 		}
-		choices.delete(myID);
 		allRecipients.add([...choices][Math.random() * choices.size]);
 	}
 	return {
@@ -99,7 +98,7 @@ export default class StringChamber extends EventTarget {
 		while (this._sendQueue.length > 0) {
 			const item = this._sendQueue[0];
 
-			if (!recipientsExist(this.participants, item.recipients)) {
+			if (!recipientsExist(this._delegate.participants, item.recipients)) {
 				// stop early; nobody is listening
 				this._sendQueue.shift();
 				item.resolve(false);
@@ -130,7 +129,6 @@ export default class StringChamber extends EventTarget {
 	send(msg, recipients) {
 		const resolvedRecipients = resolveRecipients(
 			this._delegate.participants,
-			this._delegate.myID,
 			recipients,
 		);
 		return new Promise((resolve) => {
