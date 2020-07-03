@@ -34,22 +34,23 @@ function buildMessage(sender, message) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-	const fChamberName = make('input', { id: 'chamber', type: 'text' });
-	const chamberLabel = make('label', { id: 'chamberLabel' }, ['Chamber name: ', fChamberName]);
-	const fChamberSwitch = make('button', { id: 'chamberSwitch' }, ['Go']);
-	const fChamberPass = make('input', { id: 'chamberPass', type: 'password' });
-	const chamberPassLabel = make('label', { id: 'chamberPassLabel' }, ['Password: ', fChamberPass]);
-	const chamberSelect = make('div', { id: 'chamberSelect' }, [chamberLabel, fChamberSwitch, chamberPassLabel]);
+	const fChamberName = make('input', { id: 'chamber', type: 'text', autocomplete: 'off' });
+	const fChamberPass = make('input', { id: 'chamberPass', type: 'password', autocomplete: 'off' });
+	const chamberSelect = make('form', { id: 'chamberSelect' }, [
+		make('label', { id: 'chamberLabel' }, ['Chamber name: ', fChamberName]),
+		make('label', { id: 'chamberPassLabel' }, ['Password: ', fChamberPass]),
+		make('button', { id: 'chamberSwitch' }, ['Go']),
+	]);
 	const messages = make('div', { id: 'messages' });
 	const participants = make('div', { id: 'participants' });
-	const fMessage = make('input', { id: 'message', type: 'text' });
-	const entry = make('div', { id: 'entry' }, [fMessage]);
+	const fMessage = make('input', { id: 'message', type: 'text', autocomplete: 'off' });
 	document.body.appendChild(chamberSelect);
 	document.body.appendChild(messages);
 	document.body.appendChild(participants);
-	document.body.appendChild(entry);
+	document.body.appendChild(make('div', { id: 'entry' }, [fMessage]));
 
-	function switchChamber() {
+	function switchChamber(e) {
+		e.preventDefault();
 		remoteChamber.setUrl(baseURL + '/' + fChamberName.value);
 	}
 
@@ -169,12 +170,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	baseChamber.addEventListener('open', showParticipants);
 	baseChamber.participants.addEventListener('change', showParticipants);
 
-	fChamberName.addEventListener('keyup', (e) => {
-		if (e.keyCode === 13) {
-			switchChamber();
-		}
-	});
-	fChamberSwitch.addEventListener('click', switchChamber);
+	chamberSelect.addEventListener('submit', switchChamber);
 	fMessage.addEventListener('keyup', (e) => {
 		if (e.keyCode === 13) {
 			sendMessage();
