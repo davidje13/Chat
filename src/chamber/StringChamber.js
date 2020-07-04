@@ -30,7 +30,7 @@ export default class StringChamber extends EventTarget {
 		return this._delegate.participants;
 	}
 
-	send(msg, recipients) {
-		return this._delegate.send(encodeUTF8(msg), recipients);
+	send(msg, ...args) {
+		return this._delegate.send(encodeUTF8(msg), ...args);
 	}
 }

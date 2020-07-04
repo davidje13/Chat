@@ -1,4 +1,5 @@
 import RemoteChamber from './chamber/RemoteChamber';
+import EchoChamber from './chamber/EchoChamber';
 import EncryptedChamber from './chamber/EncryptedChamber';
 import MultiplexedChamber from './chamber/MultiplexedChamber';
 import FragmentedChamber from './chamber/FragmentedChamber';
@@ -10,7 +11,8 @@ import JoinedBuffer from './util/JoinedBuffer';
 const baseURL = process.env.ECHO_HOST; // Set by webpack at build time
 
 const remoteChamber = new RemoteChamber();
-const encryptedChamber = new EncryptedChamber(remoteChamber);
+const echoChamber = new EchoChamber(remoteChamber);
+const encryptedChamber = new EncryptedChamber(echoChamber);
 const baseChamber = encryptedChamber;
 const multiplexedChamber = new MultiplexedChamber(baseChamber);
 const chatChamber = new StringChamber(new FragmentedChamber(multiplexedChamber.channel(0)));

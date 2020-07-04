@@ -21,8 +21,8 @@ class Channel extends EventTarget {
 		return this._parent._delegate.participants;
 	}
 
-	send(msg, recipients) {
-		return this._parent._delegate.send(new JoinedBuffer(this._idBuffer, msg), recipients);
+	send(msg, ...args) {
+		return this._parent._delegate.send(new JoinedBuffer(this._idBuffer, msg), ...args);
 	}
 }
 
