@@ -102,6 +102,10 @@ export default class JoinedBuffer {
 		return this._byteLength;
 	}
 
+	get bytesRemaining() {
+		return this._byteLength - this._readPos;
+	}
+
 	addFixed(...data) {
 		data.forEach((datum) => {
 			if (datum instanceof JoinedBuffer) {
@@ -130,10 +134,6 @@ export default class JoinedBuffer {
 			}
 		});
 		return this;
-	}
-
-	hasData() {
-		return this._readPos < this._byteLength;
 	}
 
 	read(size) {

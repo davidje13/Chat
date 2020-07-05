@@ -1,8 +1,7 @@
 import { forwardEvent, copyEvent } from '../util/event';
 import JoinedBuffer from '../util/JoinedBuffer';
 
-const START_PARTIAL = 1;
-const END_PARTIAL = 2;
+const START_PARTIAL = 0x80;
 
 function resolveRecipients(participants, {
 	recipients = [],
@@ -30,6 +29,10 @@ function recipientsExist(participants, {recipients, andSelf}) {
 		return true;
 	}
 	return recipients.some((r) => participants.includes(r));
+}
+
+function percent(value, total) {
+	return Math.max(0, Math.min(100, Math.round(value * 100 / total)));
 }
 
 export default class StringChamber extends EventTarget {
@@ -64,22 +67,33 @@ export default class StringChamber extends EventTarget {
 
 	_message({detail}) {
 		const buffer = new JoinedBuffer(detail.data);
-		const type = buffer.readUint8();
+		const remaining = buffer.readUint8();
+		const isStart = Boolean(remaining & START_PARTIAL);
+		const rawPercent = remaining & ~START_PARTIAL;
+		const isEnd = (rawPercent === 0);
+		const remainingPercent = Math.max(0, rawPercent - 1);
 		const data = buffer.read(JoinedBuffer.TO_END);
 
 		this._lastSenderID = detail.senderID;
-		let receiver = null;
-		if (type & START_PARTIAL) {
+		let receiver;
+		if (isStart) {
 			receiver = new JoinedBuffer();
 			this._receivers.set(detail.senderID, receiver);
 		} else {
 			receiver = this._receivers.get(detail.senderID);
+			if (!receiver) {
+				return;
+			}
 		}
-		if (!receiver) {
-			return;
-		}
-		receiver.addFixed(data);
-		if (type & END_PARTIAL) {
+		this.dispatchEvent(new CustomEvent('partialMessage', { detail: {
+			...detail,
+			isStart,
+			data: undefined,
+			partial: data,
+			remainingPercent,
+		} }));
+	receiver.addFixed(data);
+		if (isEnd) {
 			this._receivers.delete(detail.senderID);
 			this.dispatchEvent(new CustomEvent('message', { detail: {
 				...detail,
@@ -107,19 +121,19 @@ export default class StringChamber extends EventTarget {
 
 			const part = item.buffer.readNextChunk(this._maxChunkSize);
 
-			let type = 0;
+			let remaining = 0;
+			if (item.buffer.bytesRemaining) {
+				remaining |= percent(item.buffer.bytesRemaining, item.buffer.byteLength) + 1;
+			}
 			if (item.first) {
-				type |= START_PARTIAL;
+				remaining |= START_PARTIAL;
 				item.first = false;
 			}
-			if (!item.buffer.hasData()) {
-				type |= END_PARTIAL;
-			}
 			const success = await this._delegate.send(
-				new JoinedBuffer(Uint8Array.of(type), part),
+				new JoinedBuffer(Uint8Array.of(remaining), part),
 				item.recipients,
 			);
-			if (!success || !item.buffer.hasData()) {
+			if (!success || !item.buffer.bytesRemaining) {
 				this._sendQueue.shift();
 				item.resolve(success);
 			}

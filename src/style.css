@@ -104,11 +104,18 @@ body {
 	overflow: auto;
 	background: #DDDDDD;
 }
-#participants div {
+#participants>div {
 	margin: 10px;
 }
 #participants img {
 	height: 1.2em;
+	vertical-align: middle;
+}
+#participants .progress {
+	display: inline-block;
+	width: 1.2em;
+	height: 1.2em;
+	background: #008000;
 	vertical-align: middle;
 }
 #entry {

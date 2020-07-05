@@ -4,9 +4,9 @@ import EncryptedChamber from './chamber/EncryptedChamber';
 import MultiplexedChamber from './chamber/MultiplexedChamber';
 import FragmentedChamber from './chamber/FragmentedChamber';
 import StringChamber from './chamber/StringChamber';
+import JoinedBuffer from './util/JoinedBuffer';
 import make from './make';
 import './style.css';
-import JoinedBuffer from './util/JoinedBuffer';
 
 const baseURL = process.env.ECHO_HOST; // Set by webpack at build time
 
@@ -114,6 +114,15 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
+	avatarChamber.addEventListener('partialMessage', ({detail: {senderID, remainingPercent}}) => {
+		let progress = avatars.get(senderID);
+		if (!progress || progress.tagName !== 'DIV') {
+			progress = make('div', { class: 'progress' });
+			avatars.set(senderID, progress);
+		}
+		progress.style.transform = `scaleX(${1 - remainingPercent * 0.01})`;
+		showParticipants();
+	});
 	avatarChamber.addEventListener('message', async ({detail: {senderID, data}}) => {
 		const buffer = new JoinedBuffer(data);
 		const type = buffer.readString();
