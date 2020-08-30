@@ -9,7 +9,7 @@
 	},
 	"devDependencies": {
 		"clean-webpack-plugin": "3.x",
-		"echo-chamber": "git+https://github.com/davidje13/EchoChamber.git#semver:^1.0.0",
+		"websocket-echo-chamber": "1.x",
 		"file-loader": "6.x",
 		"html-webpack-plugin": "4.x",
 		"style-loader": "1.x",

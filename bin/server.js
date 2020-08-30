@@ -1,4 +1,4 @@
-const { EchoChamberHalls, WebSocketServer } = require('echo-chamber');
+const { EchoChamberHalls, WebSocketServer } = require('websocket-echo-chamber');
 const webpack = require('webpack');
 const WebpackDevServer = require('webpack-dev-server');
 const webpackConfig = require('../webpack.config');
